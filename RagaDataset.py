@@ -51,4 +51,7 @@ class RagaDataset(data.Dataset):
 
         return self.song_q.popleft()
 
+    def __len__(self):
+        return self.num_songs
+
 a = RagaDataset('/home/sauhaarda/Dataset', 5)
