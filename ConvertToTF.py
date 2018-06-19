@@ -1,18 +1,18 @@
+import torch.utils.data as data
 from os import listdir
 from os.path import isfile, join
 import os
 import json
 import progressbar
 from multiprocessing import Pool
+import torch
 import time, tqdm, random
 from collections import deque
-import numpy as np
-import torch
 
-class RagaDataset(object):
+class RagaDataset(data.Dataset):
     
     def song_queue_push(self, json_path):
-        spectr = torch.from_numpy(np.load(json_path.replace('json', 'npy').replace('metadata', 'npy_spectr')))
+        spectr = torch.load(json_path.replace('json', 'spg').replace('metadata', 'spectr'))
         json_file = json.load(open(json_path))
         return ((spectr, json_file,))
 
@@ -54,5 +54,4 @@ class RagaDataset(object):
     def __len__(self):
         return self.num_songs
 
-a = RagaDataset('/home/sauhaarda/Dataset', 20)
-a[0]
+a = RagaDataset('/home/sauhaarda/Dataset', 5)
