@@ -1,13 +1,12 @@
 from data import *
 from models import RagaDetector
-from utils import Averager
 from torch.utils.data import DataLoader
 import multiprocessing
 import progressbar
 from tensorboardX import SummaryWriter
 
 writer = SummaryWriter()
-bptt = 1000
+bptt = 500
 
 def repackage_hidden(h):
     """Wraps hidden states in new Tensors, to detach them from their history."""
@@ -38,28 +37,36 @@ if __name__ == '__main__':
         collate_fn=PadCollate())
     model = RagaDetector().cuda()
     criterion = torch.nn.CrossEntropyLoss().cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001/10)
+    optimizer = torch.optim.Adadelta(model.parameters())
     
     n_iter = 0
+    batch_num = 0
     for epoch in range(100):
-        epoch_loss = Averager()
-        for batch_idx, (song, label) in enumerate(train_loader):
-            batch_loss = Averager()
+        epoch_loss = 0
+        epoch_loss_ctr = 0
+        for song, label in train_loader:
             hidden = model.init_hidden(song.size(0))
-            optimizer.zero_grad()
+            batch_loss = 0
+            batch_loss_ctr = 0
             for batch, i in progressbar.progressbar(enumerate(range(0, song.size(2) - 1, bptt))):
+                hidden = repackage_hidden(hidden)
                 x = time_split(song, i)
                 if x is not None:
-                    hidden = repackage_hidden(hidden)
+                    optimizer.zero_grad()
                     x, hidden = model(x.cuda(), hidden)
-                    loss = criterion(hidden[1][1].cuda(), label.cuda())
+                    loss = criterion(x[-1], label.cuda())
                     loss.backward()
-                    batch_loss(loss.item())
                     optimizer.step()
+                    writer.add_scalar('data/noisy_loss', loss.item(), n_iter)
+                    batch_loss += loss.item()
+                    epoch_loss += loss.item()
+                    n_iter += 1
+                    batch_loss_ctr += 1.
+                    epoch_loss_ctr += 1
                 else:
                     break
-
-            epoch_loss(batch_loss())
-            writer.add_scalar('data/batch_loss', batch_loss(), batch_idx)
-
-        writer.add_scalar('data/epoch_loss', epoch_loss(), epoch)
+            writer.add_scalar('data/batch_loss', batch_loss/ batch_loss_ctr, batch_num)
+            for name, param in model.named_parameters():
+                writer.add_histogram(name, param.clone().cpu().data.numpy(), batch_num)
+            batch_num += 1
+        writer.add_scalar('data/epoch_loss', epoch_loss/ epoch_loss_ctr, epoch)

@@ -47,7 +47,7 @@ class RagaDetector(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x, hidden):
-        x = x.transpose(0, 1).unsqueeze(1)
+        # x = x.transpose(0, 1).unsqueeze(1)
         x = self.encoder(x)
         batch_size = x.shape[0]
         x = x.transpose(0, 2).transpose(1, 2).view(-1, batch_size, 128)
@@ -57,5 +57,5 @@ class RagaDetector(nn.Module):
 
     def init_hidden(self, bsz):
         weight = next(self.parameters())
-        return (weight.new_zeros(2, bsz, 72),
-                weight.new_zeros(2, bsz, 72))
+        return (weight.new_zeros(2, bsz, 72).cuda(),
+                weight.new_zeros(2, bsz, 72).cuda())

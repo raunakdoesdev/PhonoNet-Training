@@ -21,19 +21,12 @@ class PadCollate:
 
     def pad_collate(self, batch):
 
-        print('Padding')
         max_len = max(map(lambda x: x[0].shape[self.dim], batch))
-        batch = map(
-            lambda xy: (
-                pad_tensor(
-                    xy[0],
-                    pad=max_len,
-                    dim=self.dim),
-                xy[1]),
-            batch)
-        xs = torch.stack(list(map(lambda x: x[0], batch)), dim=1)
-        ys = torch.LongTensor(list(map(lambda x: x[1], batch)))
-        return xs, ys
+        x, y = zip(*batch)
+        x = [pad_tensor(xs, pad=max_len, dim=self.dim) for xs in x]
+        x = torch.stack(x, dim=0).unsqueeze(1)
+        y = torch.LongTensor(y)
+        return x, y
 
     def __call__(self, batch):
         return self.pad_collate(batch)
@@ -43,12 +36,9 @@ class RagaDataset(object):
 
     def __init__(self, data_root):
         # Load up all valid jsons
-        self.json_q = [join(data_root,
-                            'metadata/',
-                            f) for f in listdir(join(data_root,
-                                                     'metadata/')) if isfile(join(data_root,
-                                                                                  'metadata/',
-                                                                                  f)) and f.endswith('json')]
+        self.json_q = [join(data_root, 'metadata/',
+                            f) for f in listdir(join(data_root, 'metadata/'))\
+                               if isfile(join(data_root, 'metadata/', f)) and f.endswith('json')]
 
         # Num songs
         self.num_songs = len(self.json_q)
@@ -60,7 +50,7 @@ class RagaDataset(object):
             'json', 'npy').replace(
             'metadata', 'npy_spectr')
         spectr = torch.from_numpy(np.load(spectr_path)).transpose(0, 1).float()
-        print('Loading Song')
+        print('Loading song!')
 
         return spectr, json_file['myragaid']
 
