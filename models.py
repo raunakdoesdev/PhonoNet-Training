@@ -36,7 +36,9 @@ class RagaDetector(nn.Module):
             ('drop4', nn.Dropout(p=0.1))
         ]))
 
-        self.lstm = nn.LSTM(128, 72, num_layers=2, dropout=0.1)
+        
+        self.fc1 = nn.Linear(7936, 256)
+        self.fc2 = nn.Linear(256, 72)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -46,16 +48,12 @@ class RagaDetector(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x, hidden):
+    def forward(self, x):
         # x = x.transpose(0, 1).unsqueeze(1)
         x = self.encoder(x)
         batch_size = x.shape[0]
-        x = x.transpose(0, 2).transpose(1, 2).view(-1, batch_size, 128)
-        x, hidden = self.lstm(x, hidden)
-
-        return x, hidden
-
-    def init_hidden(self, bsz):
-        weight = next(self.parameters())
-        return (weight.new_zeros(2, bsz, 72).cuda(),
-                weight.new_zeros(2, bsz, 72).cuda())
+        x = x.view(batch_size, -1)
+        # print(x.size())
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return x
