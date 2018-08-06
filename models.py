@@ -36,9 +36,8 @@ class RagaDetector(nn.Module):
             ('drop4', nn.Dropout(p=dropout))
         ]))
 
-        print(x)
-        
         self.fc1 = nn.Linear(3968, hidden_size)
+        # self.relu = nn.LeakyReLU()
         self.fc2 = nn.Linear(hidden_size, 30)
 
         for m in self.modules():
@@ -55,5 +54,6 @@ class RagaDetector(nn.Module):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
         x = self.fc1(x)
+        # x = self.relu(x)
         x = self.fc2(x)
         return x

@@ -41,7 +41,7 @@ def run(mode, dl, model, criterion, optimizer):
     return _loss(), accuracy()
 
 def train_epochs(dropout, hidden_size, batch_size=100):
-    writer = SummaryWriter()
+    writer = SummaryWriter('runs/brute_force')
 
     tl, vl = get_dataloaders(batch_size=batch_size, split=0.9)
     model = RagaDetector(dropout, int(hidden_size)).to(device)
