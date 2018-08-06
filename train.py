@@ -5,34 +5,75 @@ from torch.utils.data import DataLoader
 import multiprocessing
 import progressbar
 from tensorboardX import SummaryWriter
+from bayes_opt import BayesianOptimization
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-writer = SummaryWriter()
 
 torch.set_default_tensor_type('torch.FloatTensor')
-if __name__ == '__main__':
-    ds = RagaDataset('/home/sauhaarda/Dataset')
-    train_loader = DataLoader(
-        ds,
-        batch_size=10,
-        num_workers=multiprocessing.cpu_count(),
-        shuffle=True)
-    model = RagaDetector().to(device)
+
+def run(mode, dl, model, criterion, optimizer):
+    if mode == 'train':
+        model.train()
+    else:
+        model.eval()
+
+    print('Training:' if mode == 'train' else 'Validating:')
+
+    _loss = Averager()
+    accuracy = Averager()
+    for batch_idx, (song, label) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
+        if mode == 'train' : optimizer.zero_grad()
+        label = label.to(device)
+        output = model(song.to(device))
+        loss = criterion(output, label)
+        if mode == 'train' : loss.backward()
+        if mode == 'train' : optimizer.step()
+
+        _, predicted = torch.max(output.data, 1)
+        total = label.size(0)
+        correct = (predicted == label).sum().item()
+        accuracy(float(correct)/float(total))
+
+        loss = criterion(output, label.to(device))
+        _loss(loss.item())
+
+    return _loss(), accuracy()
+
+def train_epochs(dropout, hidden_size, batch_size=100):
+    writer = SummaryWriter()
+
+    tl, vl = get_dataloaders(batch_size=batch_size, split=0.9)
+    model = RagaDetector(dropout, int(hidden_size)).to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001/4)
+    optimizer = torch.optim.Adadelta(model.parameters())
+
+    writer.add_text(str(dropout), 'dropout')
+    writer.add_text(str(hidden_size), 'hidden_size')
+    writer.add_text(str(batch_size), 'batch_size')
     
-    n_iter = 0
-    for epoch in range(100):
-        epoch_loss = Averager()
-        for batch_idx, (song, label) in enumerate(train_loader):
-            batch_loss = Averager()
-            optimizer.zero_grad()
-            output = model(song.to(device))
-            loss = criterion(output, label.to(device))
-            loss.backward()
-            batch_loss(loss.item())
-            optimizer.step()
-            epoch_loss(batch_loss())
-            writer.add_scalar('data/batch_loss', batch_loss(), batch_idx)
-        writer.add_scalar('data/epoch_loss', epoch_loss(), epoch)
+    max_accuracy = 0
+    for epoch in range(200):
+        loss, accuracy = run('train', tl, model, criterion, optimizer)
+        writer.add_scalar('data/train_loss', loss, epoch)
+        writer.add_scalar('data/train_acc', accuracy, epoch)
+
+        loss, accuracy = run('val', vl, model, criterion, optimizer)
+        writer.add_scalar('data/val_loss', loss, epoch)
+        writer.add_scalar('data/val_acc', accuracy, epoch)
+        max_accuracy = max(accuracy, max_accuracy)
+
+    return max_accuracy
+
+if __name__ == '__main__':
+    train_epochs(0.5, 512)
+    # bo = BayesianOptimization(
+    #     train_epochs,
+    #     {'lr' : [0.00001, 0.1],
+    #      'decay' : [0, 0.1],
+    #      'dropout' : [0, 0.5],
+    #      'hidden_size' : [128, 512]}
+    # )
+    # 
+    # gp_params = {"alpha": 1e-5}
+    # bo.maximize(n_iter=12, **gp_params)
