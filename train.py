@@ -40,11 +40,11 @@ def run(mode, dl, model, criterion, optimizer):
 
     return _loss(), accuracy()
 
-def train_epochs(dropout, hidden_size, batch_size=100):
-    writer = SummaryWriter()
+def train_epochs(dropout, hidden_size, batch_size=150):
+    writer = SummaryWriter('/home/sauhaarda/logs/gpa_2', comment='New network architecture + GAB')
 
     tl, vl = get_dataloaders(batch_size=batch_size, split=0.9)
-    model = RagaDetector(dropout, int(hidden_size)).to(device)
+    model = torch.nn.DataParallel(RagaDetector(dropout, int(hidden_size)).to(device))
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adadelta(model.parameters())
 
@@ -53,7 +53,7 @@ def train_epochs(dropout, hidden_size, batch_size=100):
     writer.add_text(str(batch_size), 'batch_size')
     
     max_accuracy = 0
-    for epoch in range(200):
+    for epoch in range(800):
         loss, accuracy = run('train', tl, model, criterion, optimizer)
         writer.add_scalar('data/train_loss', loss, epoch)
         writer.add_scalar('data/train_acc', accuracy, epoch)
@@ -66,7 +66,7 @@ def train_epochs(dropout, hidden_size, batch_size=100):
     return max_accuracy
 
 if __name__ == '__main__':
-    train_epochs(0.5, 512)
+    train_epochs(0.5, 256)
     # bo = BayesianOptimization(
     #     train_epochs,
     #     {'lr' : [0.00001, 0.1],

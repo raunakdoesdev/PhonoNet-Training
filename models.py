@@ -26,20 +26,17 @@ class RagaDetector(nn.Module):
             ('conv3', nn.Conv2d(128, 128, 3, padding=1)),
             ('norm3', nn.BatchNorm2d(128)),
             ('elu3', nn.LeakyReLU()),
-            ('pool3', nn.MaxPool2d([2, 4])),
+            ('pool3', nn.MaxPool2d([4, 4])),
             ('drop3', nn.Dropout(p=dropout)),
 
             ('conv4', nn.Conv2d(128, 128, 3, padding=1)),
             ('norm4', nn.BatchNorm2d(128)),
-            ('elu4', nn.LeakyReLU()),
-            ('pool4', nn.MaxPool2d([4, 4])),
+            ('gba', nn.AvgPool2d([3, 125])),
             ('drop4', nn.Dropout(p=dropout))
         ]))
 
-        print(x)
-        
-        self.fc1 = nn.Linear(3968, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, 30)
+
+        self.fc1 = nn.Linear(128, 30)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -55,5 +52,4 @@ class RagaDetector(nn.Module):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
         x = self.fc1(x)
-        x = self.fc2(x)
         return x
