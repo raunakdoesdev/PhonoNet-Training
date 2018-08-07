@@ -20,30 +20,31 @@ def run(mode, dl, model, criterion, optimizer):
 
     print('Training:' if mode == 'train' else 'Validating:')
 
-    _loss = Averager()
-    accuracy = Averager()
-    for batch_idx, (song, label) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
-        if mode == 'train' : optimizer.zero_grad()
-        label = label.to(device)
-        output = model(song.to(device))
-        loss = criterion(output, label)
-        if mode == 'train' : loss.backward()
-        if mode == 'train' : optimizer.step()
+    with torch.set_grad_enabled(mode == 'train'):
+        _loss = Averager()
+        accuracy = Averager()
+        for batch_idx, (song, label) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
+            if mode == 'train' : optimizer.zero_grad()
+            label = label.to(device)
+            output = model(song.to(device))
+            loss = criterion(output, label)
+            if mode == 'train' : loss.backward()
+            if mode == 'train' : optimizer.step()
 
-        _, predicted = torch.max(output.data, 1)
-        total = label.size(0)
-        correct = (predicted == label).sum().item()
-        accuracy(float(correct)/float(total))
+            _, predicted = torch.max(output.data, 1)
+            total = label.size(0)
+            correct = (predicted == label).sum().item()
+            accuracy(float(correct)/float(total))
 
-        loss = criterion(output, label.to(device))
-        _loss(loss.item())
+            loss = criterion(output, label.to(device))
+            _loss(loss.item())
 
-    return _loss(), accuracy()
+        return _loss(), accuracy()
 
-def train_epochs(dropout, hidden_size, batch_size=150):
-    writer = SummaryWriter('/home/sauhaarda/logs/gpa_2', comment='New network architecture + GAB')
+def train_epochs(dropout, hidden_size, batch_size=120):
+    writer = SummaryWriter('runs/split_gpa_2', comment='')
 
-    tl, vl = get_dataloaders(batch_size=batch_size, split=0.9)
+    tl, vl = get_dataloaders(batch_size=batch_size, split=0.7)
     model = torch.nn.DataParallel(RagaDetector(dropout, int(hidden_size)).to(device))
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adadelta(model.parameters())
