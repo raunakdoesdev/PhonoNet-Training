@@ -6,11 +6,21 @@ import multiprocessing
 import progressbar
 from tensorboardX import SummaryWriter
 from bayes_opt import BayesianOptimization
+import random
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 torch.set_default_tensor_type('torch.FloatTensor')
+
+
+def transpose(chroma, ragaid, tonic):
+    shift = random.randint(0, 11)
+
+    if shift == 0:
+        return chroma, ragaid, tonic
+
+    return torch.cat([chroma[:, shift:], chroma[:, :shift]], 1), ragaid, (tonic + shift) % 12
 
 def run(mode, dl, model, criterion, optimizer):
     if mode == 'train':
@@ -23,28 +33,37 @@ def run(mode, dl, model, criterion, optimizer):
     with torch.set_grad_enabled(mode == 'train'):
         _loss = Averager()
         accuracy = Averager()
-        for batch_idx, (song, label) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
+        tonic_accuracy = Averager()
+        for batch_idx, (song, label, tonic) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
             if mode == 'train' : optimizer.zero_grad()
             label = label.to(device)
+            tonic = tonic.to(device)
             output = model(song.to(device))
-            loss = criterion(output, label)
+            raga_loss = criterion(output[:, :30], label)
+            # tonic_loss = criterion(output[:, -12:], tonic)
+            loss = raga_loss # + tonic_loss
             if mode == 'train' : loss.backward()
             if mode == 'train' : optimizer.step()
 
-            _, predicted = torch.max(output.data, 1)
+            _, predicted = torch.max(output[:, :30].data, 1)
             total = label.size(0)
             correct = (predicted == label).sum().item()
             accuracy(float(correct)/float(total))
 
+            # _, predicted = torch.max(output[:, -12:].data, 1)
+            # total = label.size(0)
+            # correct = (predicted == tonic).sum().item()
+            tonic_accuracy(0)
+
             loss = criterion(output, label.to(device))
             _loss(loss.item())
 
-        return _loss(), accuracy()
+        return _loss(), accuracy(), tonic_accuracy()
 
 def train_epochs(dropout, hidden_size, batch_size=120):
-    writer = SummaryWriter('runs/split_gpa_2', comment='')
+    writer = SummaryWriter('runs/augment_no_tonic', comment='')
 
-    tl, vl = get_dataloaders(batch_size=batch_size, split=0.7)
+    tl, vl = get_dataloaders(batch_size=batch_size, split=0.90, transform=transpose)
     model = torch.nn.DataParallel(RagaDetector(dropout, int(hidden_size)).to(device))
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adadelta(model.parameters())
@@ -55,13 +74,15 @@ def train_epochs(dropout, hidden_size, batch_size=120):
     
     max_accuracy = 0
     for epoch in range(800):
-        loss, accuracy = run('train', tl, model, criterion, optimizer)
+        loss, accuracy, ta = run('train', tl, model, criterion, optimizer)
         writer.add_scalar('data/train_loss', loss, epoch)
         writer.add_scalar('data/train_acc', accuracy, epoch)
+        writer.add_scalar('data/train_t_acc', ta, epoch)
 
-        loss, accuracy = run('val', vl, model, criterion, optimizer)
+        loss, accuracy, ta = run('val', vl, model, criterion, optimizer)
         writer.add_scalar('data/val_loss', loss, epoch)
         writer.add_scalar('data/val_acc', accuracy, epoch)
+        writer.add_scalar('data/val_t_acc', ta, epoch)
         max_accuracy = max(accuracy, max_accuracy)
 
     return max_accuracy

@@ -28,14 +28,14 @@ class RagaDetector(nn.Module):
             ('pool3', nn.MaxPool2d([4, 4])),
             ('drop3', nn.Dropout(p=dropout)),
 
-            ('conv4', nn.Conv2d(128, 256, 3, padding=1)),
-            ('norm4', nn.BatchNorm2d(256)),
+            ('conv4', nn.Conv2d(128, 128, 3, padding=1)),
+            ('norm4', nn.BatchNorm2d(128)),
             ('gba', nn.AvgPool2d([3, 125])),
             ('drop4', nn.Dropout(p=dropout))
         ]))
 
 
-        self.fc1 = nn.Linear(256, 30)
+        self.fc1 = nn.Linear(128, 30)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):

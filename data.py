@@ -6,57 +6,53 @@ from os import listdir
 from os.path import join, isfile
 import glob, random
 import multiprocessing
+import pandas as pd
 
 class RagaDataset(object):
 
-    def __init__(self, data_root, json_q=None, max_len=3000):
-        if json_q is None:
-            self.json_q = glob.glob(join(data_root, 'meta_chunks') + '/**/*.json', recursive=True)
+    def __init__(self, df, max_len=3000, transform=None):
+        if isinstance(df, pd.DataFrame):
+            self.df = df
+        elif isinstance(df, str):
+            self.df = pd.read_pickle(df)
         else:
-            self.json_q = json_q
+            raise TypeError("Input must be either a string or dataframe.")
 
         self.max_len = max_len
-
-        # Num songs
-        self.num_songs = len(self.json_q)
+        self.transform = transform
 
     def __getitem__(self, index):
-        json_path = self.json_q[index]
-        json_file = json.load(open(json_path))
+        chunk = self.df.iloc[index]
+        chroma = torch.from_numpy(chunk['chroma']).float()
+        if not chroma.size()[1] == self.max_len:
+            padding = torch.zeros(chroma.size()[0], self.max_len - chroma.size()[1])
+            chroma = torch.cat((chroma, padding), 1)
 
-        spectr_path = json_path.replace(
-            'json', 'npy').replace(
-            'meta_chunks', 'chroma_chunks')
-        spectr = torch.from_numpy(np.load(spectr_path)).float()
+        if self.transform:
+            return self.transform(chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic'])
 
-        # print(spectr.size())
-
-        if not spectr.size()[1] == self.max_len:
-            padding = torch.zeros(spectr.size()[0], self.max_len - spectr.size()[1])
-            spectr = torch.cat((spectr, padding), 1)
-
-
-        return spectr.unsqueeze(0), json_file['myragaid']
+        return chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic']
 
     def __len__(self):
-        return self.num_songs
+        return self.df.shape[0]
 
-def get_dataloaders(data_root='/home/sauhaarda/Dataset', split=0.9, seed=141, batch_size=10):
-    # Load queue of all the songs 
-    json_q = glob.glob(join(data_root, 'meta_chunks') + '/**/*.json', recursive=True)
-    random.Random(seed).shuffle(json_q)
+def get_dataloaders(data_path='/home/sauhaarda/Dataset/dataset.pkl', split=0.98, seed=141, batch_size=10, transform=None):
+    df = pd.read_pickle(data_path)
+
+    songs = df.song_id.unique()
+    random.Random(seed).shuffle(songs) # shuffle songs with random seed
 
     # Create train/val split
-    train_len = int(len(json_q) * split)
+    train_len = int(len(songs) * split)
     print(train_len)
-    val_len = len(json_q) - train_len
+    val_len = len(songs) - train_len
 
-    train_q = json_q[:train_len]
-    val_q = json_q[-val_len:]
+    train_q = songs[:train_len]
+    val_q = songs[-val_len:]
 
     # Create Datset objects
-    td = RagaDataset(data_root, train_q)
-    vd = RagaDataset(data_root, val_q)
+    td = RagaDataset(df.loc[df['song_id'].isin(train_q)], transform=transform)
+    vd = RagaDataset(df.loc[df['song_id'].isin(val_q)], transform=None)
 
     train_loader = DataLoader(
         td,
@@ -68,4 +64,5 @@ def get_dataloaders(data_root='/home/sauhaarda/Dataset', split=0.9, seed=141, ba
         batch_size=batch_size,
         num_workers=multiprocessing.cpu_count(),
         shuffle=False)
+
     return train_loader, val_loader
