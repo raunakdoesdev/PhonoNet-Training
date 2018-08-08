@@ -20,7 +20,7 @@ def transpose(chroma, ragaid, tonic):
     if shift == 0:
         return chroma, ragaid, tonic
 
-    return torch.cat([chroma[:, shift:], chroma[:, :shift]], 1), ragaid, (tonic + shift) % 12
+    return torch.cat([chroma[:, -shift:], chroma[:, :-shift]], 1), ragaid, (tonic + shift) % 12
 
 def run(mode, dl, model, criterion, optimizer):
     if mode == 'train':
@@ -39,9 +39,9 @@ def run(mode, dl, model, criterion, optimizer):
             label = label.to(device)
             tonic = tonic.to(device)
             output = model(song.to(device))
-            raga_loss = criterion(output[:, :30], label)
-            # tonic_loss = criterion(output[:, -12:], tonic)
-            loss = raga_loss # + tonic_loss
+            raga_loss = 0.9 * criterion(output[:, :30], label)
+            tonic_loss = 0.1 * criterion(output[:, -12:], tonic)
+            loss = raga_loss + tonic_loss
             if mode == 'train' : loss.backward()
             if mode == 'train' : optimizer.step()
 
@@ -50,18 +50,17 @@ def run(mode, dl, model, criterion, optimizer):
             correct = (predicted == label).sum().item()
             accuracy(float(correct)/float(total))
 
-            # _, predicted = torch.max(output[:, -12:].data, 1)
-            # total = label.size(0)
-            # correct = (predicted == tonic).sum().item()
-            tonic_accuracy(0)
+            _, predicted = torch.max(output[:, -12:].data, 1)
+            total = label.size(0)
+            correct = (predicted == tonic).sum().item()
+            tonic_accuracy(correct/float(total))
 
-            loss = criterion(output, label.to(device))
-            _loss(loss.item())
+            _loss(raga_loss.item())
 
         return _loss(), accuracy(), tonic_accuracy()
 
 def train_epochs(dropout, hidden_size, batch_size=120):
-    writer = SummaryWriter('runs/augment_no_tonic', comment='')
+    writer = SummaryWriter('runs/big_scaled_fixed_augment_t', comment='fixed tonic')
 
     tl, vl = get_dataloaders(batch_size=batch_size, split=0.90, transform=transpose)
     model = torch.nn.DataParallel(RagaDetector(dropout, int(hidden_size)).to(device))
