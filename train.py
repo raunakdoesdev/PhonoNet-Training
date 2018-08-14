@@ -27,8 +27,8 @@ def transpose(chroma, ragaid, tonic, s):
 
     return torch.cat([chroma[:, -shift:], chroma[:, :-shift]], 1), ragaid, (tonic + shift) % 12, s
 
-def run(mode, dl, model, criterion, optimizer, val_songs):
 
+def run(mode, dl, model, criterion, optimizer, val_songs):
     full_val_acc = {}
     if mode == 'train':
         model.train()
@@ -82,9 +82,13 @@ def run(mode, dl, model, criterion, optimizer, val_songs):
         return _loss(), accuracy(), tonic_accuracy(), ans
 
 def train_epochs(dropout, hidden_size, batch_size=120):
-    writer = SummaryWriter('runs/full_net_acc_check4', comment='fixed tonic')
+    run_name = 'full_net_acc_check4'
+    writer = SummaryWriter('runs/' + run_name, comment='fixed tonic')
 
-    tl, vl, val_songs = get_dataloaders(batch_size=batch_size, split=0.9166666, transform=transpose)
+    bacc = 0.0  # initialize best scores
+    bloss = 1000000  # initialize best scores
+
+    tl, vl, val_songs = get_dataloaders(batch_size=batch_size, split=0., transform=transpose)
     model = torch.nn.DataParallel(RagaDetector(dropout, int(hidden_size)).to(device))
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adadelta(model.parameters())
@@ -105,6 +109,15 @@ def train_epochs(dropout, hidden_size, batch_size=120):
         writer.add_scalar('data/val_acc', accuracy, epoch)
         writer.add_scalar('data/val_t_acc', ta, epoch)
         writer.add_scalar('data/full_val_acc', ans, epoch)
+
+        if accuracy > bacc:
+            bacc = accuracy
+            torch.save({'net' : model.state_dict(), 'epoch' : epoch, 'loss' : loss, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/{}_epoch_{}_acc_{}.model'.format(run_name, epoch, accuracy))
+        elif loss < bloss:
+            bloss = loss
+            torch.save({'net' : model.state_dict(), 'loss' : loss, 'epoch' : epoch, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/{}_epoch_{}_loss_{}.model'.format(run_name, epoch, loss))
+        bloss = min(bloss, loss)
+            
         max_accuracy = max(accuracy, max_accuracy)
 
     return max_accuracy
