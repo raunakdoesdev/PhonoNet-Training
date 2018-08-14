@@ -29,9 +29,9 @@ class RagaDataset(object):
             chroma = torch.cat((chroma, padding), 1)
 
         if self.transform:
-            return self.transform(chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic'])
+            return self.transform(chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic'], chunk['song_id'])
 
-        return chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic']
+        return chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic'], chunk['song_id']
 
     def __len__(self):
         return self.df.shape[0]
@@ -65,4 +65,4 @@ def get_dataloaders(data_path='/home/sauhaarda/Dataset/dataset.pkl', split=0.98,
         num_workers=multiprocessing.cpu_count(),
         shuffle=False)
 
-    return train_loader, val_loader
+    return train_loader, val_loader, val_q
