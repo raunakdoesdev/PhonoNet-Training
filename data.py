@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 import json
+from random import shuffle
 from os import listdir
 from os.path import join, isfile
 import glob, random
@@ -10,7 +11,7 @@ import pandas as pd
 
 class RagaDataset(object):
 
-    def __init__(self, df, max_len=3000, transform=None):
+    def __init__(self, df, max_len=1500, transform=None):
         if isinstance(df, pd.DataFrame):
             self.df = df
         elif isinstance(df, str):
@@ -36,23 +37,23 @@ class RagaDataset(object):
     def __len__(self):
         return self.df.shape[0]
 
-def get_dataloaders(data_path='/home/sauhaarda/Dataset/dataset.pkl', split=0.98, seed=141, batch_size=10, transform=None):
+def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/halfdataset.pkl', transform=None, batch_size=10):
     df = pd.read_pickle(data_path)
+    songs = torch.load('12fold.pkl')
+    songs = [item for sublist in songs for item in sublist]
+    shuffle(songs)
 
-    songs = df.song_id.unique()
-    random.Random(seed).shuffle(songs) # shuffle songs with random seed
+    val_songs = songs[:int(len(songs)/10)]
+    t_songs = songs[int(len(songs)/10):]
+    songs = t_songs
 
-    # Create train/val split
-    train_len = int(len(songs) * split)
-    print(train_len)
-    val_len = len(songs) - train_len
-
-    train_q = songs[:train_len]
-    val_q = songs[-val_len:]
+    print("printing the goods")
+    print(len(val_songs))
+    print(len(songs))
 
     # Create Datset objects
-    td = RagaDataset(df.loc[df['song_id'].isin(train_q)], transform=transform)
-    vd = RagaDataset(df.loc[df['song_id'].isin(val_q)], transform=None)
+    td = RagaDataset(df.loc[df['song_id'].isin(songs)], transform=transform)
+    vd = RagaDataset(df.loc[df['song_id'].isin(val_songs)], transform=None)
 
     train_loader = DataLoader(
         td,
@@ -65,4 +66,4 @@ def get_dataloaders(data_path='/home/sauhaarda/Dataset/dataset.pkl', split=0.98,
         num_workers=multiprocessing.cpu_count(),
         shuffle=False)
 
-    return train_loader, val_loader, val_q
+    return train_loader, val_loader, val_songs

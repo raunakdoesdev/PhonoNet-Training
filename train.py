@@ -7,6 +7,8 @@ import progressbar
 from tensorboardX import SummaryWriter
 from bayes_opt import BayesianOptimization
 import random
+import gc
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -46,12 +48,14 @@ def run(mode, dl, model, criterion, optimizer, val_songs):
         tonic_accuracy = Averager()
         for batch_idx, (song, label, tonic, sid) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
             if mode == 'train' : optimizer.zero_grad()
+
             label = label.to(device)
             tonic = tonic.to(device)
-            output = model(song.to(device))
-            raga_loss = 0.9 * criterion(output[:, :30], label)
-            tonic_loss = 0.1 * criterion(output[:, -12:], tonic)
-            loss = raga_loss + tonic_loss
+            song = song.to(device)
+            output = model(song)
+            raga_loss =  criterion(output[:, :30], label)
+            # tonic_loss = 0.1 * criterion(output[:, -12:], tonic)
+            loss = raga_loss
             if mode == 'train' : loss.backward()
             if mode == 'train' : optimizer.step()
 
@@ -81,15 +85,17 @@ def run(mode, dl, model, criterion, optimizer, val_songs):
 
         return _loss(), accuracy(), tonic_accuracy(), ans
 
-def train_epochs(dropout, hidden_size, batch_size=120):
-    run_name = 'full_net_acc_check4'
-    writer = SummaryWriter('runs/' + run_name, comment='fixed tonic')
+def train_epochs(dropout, hidden_size, batch_size=1):
+    run_name = 'aug1'
+    writer = SummaryWriter('runs/' + run_name, comment='fixed hidden size 1')
 
     bacc = 0.0  # initialize best scores
     bloss = 1000000  # initialize best scores
 
-    tl, vl, val_songs = get_dataloaders(batch_size=batch_size, split=0., transform=transpose)
-    model = torch.nn.DataParallel(RagaDetector(dropout, int(hidden_size)).to(device))
+    # tl, vl, val_songs = get_dataloaders(batch_size=batch_size, split=.95, transform=transpose)
+    tl, vl, val_songs = get_dataloaders(0, batch_size=batch_size, transform=transpose)
+
+    model = RagaDetector(dropout, int(hidden_size)).to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adadelta(model.parameters())
 
@@ -99,6 +105,7 @@ def train_epochs(dropout, hidden_size, batch_size=120):
     
     max_accuracy = 0
     for epoch in range(800):
+        print(epoch)
         loss, accuracy, ta, _ = run('train', tl, model, criterion, optimizer, None)
         writer.add_scalar('data/train_loss', loss, epoch)
         writer.add_scalar('data/train_acc', accuracy, epoch)
@@ -110,12 +117,15 @@ def train_epochs(dropout, hidden_size, batch_size=120):
         writer.add_scalar('data/val_t_acc', ta, epoch)
         writer.add_scalar('data/full_val_acc', ans, epoch)
 
+        print(loss)
         if accuracy > bacc:
             bacc = accuracy
-            torch.save({'net' : model.state_dict(), 'epoch' : epoch, 'loss' : loss, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/{}_epoch_{}_acc_{}.model'.format(run_name, epoch, accuracy))
-        elif loss < bloss:
+            torch.save({'net' : model.state_dict(), 'epoch' : epoch, 'loss' : loss, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/0/{}_epoch_{}_acc_{}.model'.format(run_name, epoch, accuracy))
+        if loss < bloss:
+            print('saving a loss model!')
+            print('bloss')
             bloss = loss
-            torch.save({'net' : model.state_dict(), 'loss' : loss, 'epoch' : epoch, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/{}_epoch_{}_loss_{}.model'.format(run_name, epoch, loss))
+            torch.save({'net' : model.state_dict(), 'loss' : loss, 'epoch' : epoch, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/0/{}_epoch_{}_loss_{}.model'.format(run_name, epoch, loss))
         bloss = min(bloss, loss)
             
         max_accuracy = max(accuracy, max_accuracy)
@@ -123,7 +133,7 @@ def train_epochs(dropout, hidden_size, batch_size=120):
     return max_accuracy
 
 if __name__ == '__main__':
-    train_epochs(0.5, 256)
+    train_epochs(0.6, 256, 120)
     # bo = BayesianOptimization(
     #     train_epochs,
     #     {'lr' : [0.00001, 0.1],
