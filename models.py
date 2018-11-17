@@ -2,6 +2,21 @@ import torch.nn as nn
 import torch
 from collections import OrderedDict
 
+class LSTM(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(LSTM, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.lstm = nn.LSTM(input_dim, hidden_dim)
+        self.hidden = self.init_hidden()
+    def init_hidden(self):
+        return (torch.zeros(1, 1, self.hidden_dim),
+                torch.zeros(1, 1, self.hidden_dim))
+    def forward(self, x):
+        lstm_out, self.hidden = self.lstm(x)
+        return lstm_out
+
 
 class RagaDetector(nn.Module):
     def __init__(self, dropout=0.15, hidden_size=256):

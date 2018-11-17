@@ -1,5 +1,6 @@
 from data import *
 from models import RagaDetector
+from models import LSTM
 from utils import Averager
 from torch.utils.data import DataLoader
 import multiprocessing
@@ -31,6 +32,7 @@ def transpose(chroma, ragaid, tonic, s):
 
 
 def run(mode, dl, model, criterion, optimizer, val_songs):
+    rec = LSTM(200, 30)
     full_val_acc = {}
     if mode == 'train':
         model.train()
@@ -53,57 +55,42 @@ def run(mode, dl, model, criterion, optimizer, val_songs):
             tonic = tonic.to(device)
             song = song.to(device)
 
+            out = []
             with torch.no_grad():
                 song_segs = song.split(1500, dim=3)
-                out = []
                 for i in range(len(song_segs)):
                     chunk = song_segs[i] # get specific chunk
-                    print(chunk.shape)
                     if not chunk.shape[3] == 1500:  # hardcoded 1500 size
                         padding = torch.zeros(1, 1, chunk.size()[2], 1500 - chunk.size()[3])
-                        print(chunk)
                         chunk = torch.cat((chunk, padding), 3)
-                    out.append(model(chunk))  # run model through your model
+                    out.append(model(chunk).unsqueeze(0))  # run model through your model
 
             if mode == 'train' : optimizer.zero_grad()
 
+            lstm_in = torch.cat(out).view(len(out), 1, -1)
+            lstm_in.requires_grad = True
 
+            lstm_out = rec(lstm_in)
 
-
-
-
-            output = model(song)
-            raga_loss =  criterion(output[:, :30], label)
+            raga_loss =  criterion(lstm_out[-1, :, :30], label)
             # tonic_loss = 0.1 * criterion(output[:, -12:], tonic)
             loss = raga_loss
             if mode == 'train' : loss.backward()
             if mode == 'train' : optimizer.step()
 
 
-            _, predicted = torch.max(output[:, :30].data, 1)
+            _, predicted = torch.max(lstm_out[-1, :, :30].data, 1)
             total = label.size(0)
             correct = (predicted == label).sum().item()
             accuracy(float(correct)/float(total))
 
             if not mode == 'train':
-                for batch in range(len(output[:, :30])):
+                for batch in range(len(lstm_out[-1, :, :30])):
                     full_val_acc[sid[batch]][predicted] += 0.1 
-
-            _, predicted = torch.max(output[:, -12:].data, 1)
-            total = label.size(0)
-            correct = (predicted == tonic).sum().item()
-            tonic_accuracy(correct/float(total))
 
             _loss(raga_loss.item())
 
-        ans = 0
-        if not mode == 'train':
-            total_correct = 0
-            for songres in full_val_acc:
-                total_correct += int(torch.max(full_val_acc[songres].data, 0)[1].item() == song2ragaid[songres])
-            ans = (float(total_correct)/len(full_val_acc))
-
-        return _loss(), accuracy(), tonic_accuracy(), ans
+        return _loss(), accuracy(), 0, 0
 
 def train_epochs(dropout, hidden_size, batch_size=1):
     run_name = 'aug1'
@@ -139,6 +126,8 @@ def train_epochs(dropout, hidden_size, batch_size=1):
         writer.add_scalar('data/full_val_acc', ans, epoch)
 
         print(loss)
+        print("val accuracy: " + str(acc))
+
         if accuracy > bacc:
             bacc = accuracy
             torch.save({'net' : model.state_dict(), 'epoch' : epoch, 'loss' : loss, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/0/{}_epoch_{}_acc_{}.model'.format(run_name, epoch, accuracy))
