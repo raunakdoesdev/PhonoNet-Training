@@ -34,7 +34,7 @@ class RagaDetector(nn.Module):
             ('drop4', nn.Dropout(p=dropout))
         ]))
 
-        self.fc1 = nn.Linear(200, 30)
+        self.fc1 = nn.Linear(200, 42)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -48,7 +48,7 @@ class RagaDetector(nn.Module):
         x = self.encoder(x)
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
-        x = self.fc1(x)
+        # x = self.fc1(x)
         return x
 
     def summary(self, input_size):

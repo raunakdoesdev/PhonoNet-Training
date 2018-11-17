@@ -47,11 +47,31 @@ def run(mode, dl, model, criterion, optimizer, val_songs):
         accuracy = Averager()
         tonic_accuracy = Averager()
         for batch_idx, (song, label, tonic, sid) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
-            if mode == 'train' : optimizer.zero_grad()
+
 
             label = label.to(device)
             tonic = tonic.to(device)
             song = song.to(device)
+
+            with torch.no_grad():
+                song_segs = song.split(1500, dim=3)
+                out = []
+                for i in range(len(song_segs)):
+                    chunk = song_segs[i] # get specific chunk
+                    print(chunk.shape)
+                    if not chunk.shape[3] == 1500:  # hardcoded 1500 size
+                        padding = torch.zeros(1, 1, chunk.size()[2], 1500 - chunk.size()[3])
+                        print(chunk)
+                        chunk = torch.cat((chunk, padding), 3)
+                    out.append(model(chunk))  # run model through your model
+
+            if mode == 'train' : optimizer.zero_grad()
+
+
+
+
+
+
             output = model(song)
             raga_loss =  criterion(output[:, :30], label)
             # tonic_loss = 0.1 * criterion(output[:, -12:], tonic)
@@ -96,6 +116,7 @@ def train_epochs(dropout, hidden_size, batch_size=1):
     tl, vl, val_songs = get_dataloaders(0, batch_size=batch_size, transform=transpose)
 
     model = RagaDetector(dropout, int(hidden_size)).to(device)
+    model.load_state_dict(torch.load('halfnetfiftyacc.model', map_location='cpu')['net'])
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adadelta(model.parameters())
 
@@ -133,7 +154,7 @@ def train_epochs(dropout, hidden_size, batch_size=1):
     return max_accuracy
 
 if __name__ == '__main__':
-    train_epochs(0.6, 256, 120)
+    train_epochs(0.6, 256, 1)
     # bo = BayesianOptimization(
     #     train_epochs,
     #     {'lr' : [0.00001, 0.1],

@@ -25,9 +25,6 @@ class RagaDataset(object):
     def __getitem__(self, index):
         chunk = self.df.iloc[index]
         chroma = torch.from_numpy(chunk['chroma']).float()
-        if not chroma.size()[1] == self.max_len:
-            padding = torch.zeros(chroma.size()[0], self.max_len - chroma.size()[1])
-            chroma = torch.cat((chroma, padding), 1)
 
         if self.transform:
             return self.transform(chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic'], chunk['song_id'])
@@ -37,7 +34,7 @@ class RagaDataset(object):
     def __len__(self):
         return self.df.shape[0]
 
-def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/halfdataset.pkl', transform=None, batch_size=10):
+def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/longdataset.pkl', transform=None, batch_size=10):
     df = pd.read_pickle(data_path)
     songs = torch.load('12fold.pkl')
     songs = [item for sublist in songs for item in sublist]
@@ -46,10 +43,6 @@ def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/halfdatas
     val_songs = songs[:int(len(songs)/10)]
     t_songs = songs[int(len(songs)/10):]
     songs = t_songs
-
-    print("printing the goods")
-    print(len(val_songs))
-    print(len(songs))
 
     # Create Datset objects
     td = RagaDataset(df.loc[df['song_id'].isin(songs)], transform=transform)
