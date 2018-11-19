@@ -31,16 +31,9 @@ def transpose(chroma, ragaid, tonic, s):
     return torch.cat([chroma[:, -shift:], chroma[:, :-shift]], 1), ragaid, (tonic + shift) % 12, s
 
 
-def run(mode, dl, model, criterion, optimizer, val_songs):
-    rec = LSTM(200, 30)
+def run(mode, dl, model, rec, criterion, optimizer, val_songs):
     full_val_acc = {}
-    if mode == 'train':
-        model.train()
-    else:
-        for song in val_songs:
-            full_val_acc[song] = torch.zeros(30)
-
-        model.eval()
+    model.eval()
 
     print('Training:' if mode == 'train' else 'Validating:')
 
@@ -61,9 +54,9 @@ def run(mode, dl, model, criterion, optimizer, val_songs):
                 for i in range(len(song_segs)):
                     chunk = song_segs[i] # get specific chunk
                     if not chunk.shape[3] == 1500:  # hardcoded 1500 size
-                        padding = torch.zeros(1, 1, chunk.size()[2], 1500 - chunk.size()[3])
+                        padding = torch.zeros(1, 1, chunk.size()[2], 1500 - chunk.size()[3]).cuda()
                         chunk = torch.cat((chunk, padding), 3)
-                    out.append(model(chunk).unsqueeze(0))  # run model through your model
+                    out.append(model(chunk.contiguous()).unsqueeze(0))  # run model through your model
 
             if mode == 'train' : optimizer.zero_grad()
 
@@ -84,10 +77,6 @@ def run(mode, dl, model, criterion, optimizer, val_songs):
             correct = (predicted == label).sum().item()
             accuracy(float(correct)/float(total))
 
-            if not mode == 'train':
-                for batch in range(len(lstm_out[-1, :, :30])):
-                    full_val_acc[sid[batch]][predicted] += 0.1 
-
             _loss(raga_loss.item())
 
         return _loss(), accuracy(), 0, 0
@@ -103,9 +92,10 @@ def train_epochs(dropout, hidden_size, batch_size=1):
     tl, vl, val_songs = get_dataloaders(0, batch_size=batch_size, transform=transpose)
 
     model = RagaDetector(dropout, int(hidden_size)).to(device)
-    model.load_state_dict(torch.load('halfnetfiftyacc.model', map_location='cpu')['net'])
+    rec = LSTM(200, 30).to(device)
+    model.load_state_dict(torch.load('aug2_epoch_665_acc_0.7888888888888889.model', map_location='cuda:0')['net'])
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.Adadelta(model.parameters())
+    optimizer = torch.optim.Adadelta(rec.parameters())
 
     writer.add_text(str(dropout), 'dropout')
     writer.add_text(str(hidden_size), 'hidden_size')
@@ -114,19 +104,22 @@ def train_epochs(dropout, hidden_size, batch_size=1):
     max_accuracy = 0
     for epoch in range(800):
         print(epoch)
-        loss, accuracy, ta, _ = run('train', tl, model, criterion, optimizer, None)
+        loss, accuracy, ta, _ = run('train', tl, model, rec, criterion, optimizer, None)
         writer.add_scalar('data/train_loss', loss, epoch)
         writer.add_scalar('data/train_acc', accuracy, epoch)
         writer.add_scalar('data/train_t_acc', ta, epoch)
 
-        loss, accuracy, ta, ans = run('val', vl, model, criterion, optimizer, val_songs)
+        print(loss)
+        print("train accuracy: " + str(accuracy))
+
+        loss, accuracy, ta, ans = run('val', vl, model, rec, criterion, optimizer, val_songs)
         writer.add_scalar('data/val_loss', loss, epoch)
         writer.add_scalar('data/val_acc', accuracy, epoch)
         writer.add_scalar('data/val_t_acc', ta, epoch)
         writer.add_scalar('data/full_val_acc', ans, epoch)
 
         print(loss)
-        print("val accuracy: " + str(acc))
+        print("val accuracy: " + str(accuracy))
 
         if accuracy > bacc:
             bacc = accuracy

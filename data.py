@@ -40,8 +40,8 @@ def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/longdatas
     songs = [item for sublist in songs for item in sublist]
     shuffle(songs)
 
-    val_songs = songs[:int(len(songs)/10)]
-    t_songs = songs[int(len(songs)/10):]
+    val_songs = songs[:int(len(songs) * 0.5)]
+    t_songs = songs[int(len(songs) * 0.5):]
     songs = t_songs
 
     # Create Datset objects
