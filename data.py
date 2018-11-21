@@ -1,68 +1,62 @@
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 import json
+from random import shuffle
 from os import listdir
 from os.path import join, isfile
-
-
-def pad_tensor(vec, pad, dim):
-    if pad - vec.size(dim) > 0:
-        pad_size = list(vec.shape)
-        pad_size[dim] = pad - vec.size(dim)
-        return torch.cat([vec, torch.zeros(*pad_size)], dim=dim)
-    else:
-        return vec
-
-
-class PadCollate:
-
-    def __init__(self, dim=0):
-        self.dim = dim
-
-    def pad_collate(self, batch):
-
-        print('Padding')
-        max_len = max(map(lambda x: x[0].shape[self.dim], batch))
-        batch = map(
-            lambda xy: (
-                pad_tensor(
-                    xy[0],
-                    pad=max_len,
-                    dim=self.dim),
-                xy[1]),
-            batch)
-        xs = torch.stack(list(map(lambda x: x[0], batch)), dim=1)
-        ys = torch.LongTensor(list(map(lambda x: x[1], batch)))
-        return xs, ys
-
-    def __call__(self, batch):
-        return self.pad_collate(batch)
-
+import glob, random
+import multiprocessing
+import pandas as pd
 
 class RagaDataset(object):
 
-    def __init__(self, data_root):
-        # Load up all valid jsons
-        self.json_q = [join(data_root,
-                            'metadata/',
-                            f) for f in listdir(join(data_root,
-                                                     'metadata/')) if isfile(join(data_root,
-                                                                                  'metadata/',
-                                                                                  f)) and f.endswith('json')]
+    def __init__(self, df, max_len=1500, transform=None):
+        if isinstance(df, pd.DataFrame):
+            self.df = df
+        elif isinstance(df, str):
+            self.df = pd.read_pickle(df)
+        else:
+            raise TypeError("Input must be either a string or dataframe.")
 
-        # Num songs
-        self.num_songs = len(self.json_q)
+        self.max_len = max_len
+        self.transform = transform
 
     def __getitem__(self, index):
-        json_path = self.json_q[index]
-        json_file = json.load(open(json_path))
-        spectr_path = json_path.replace(
-            'json', 'npy').replace(
-            'metadata', 'npy_spectr')
-        spectr = torch.from_numpy(np.load(spectr_path)).transpose(0, 1).float()
-        print('Loading Song')
+        chunk = self.df.iloc[index]
+        chroma = torch.from_numpy(chunk['chroma']).float()
 
-        return spectr, json_file['myragaid']
+        if self.transform:
+            return self.transform(chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic'], chunk['song_id'])
+
+        return chroma.unsqueeze(0), chunk['raga_id'], chunk['tonic'], chunk['song_id']
 
     def __len__(self):
-        return self.num_songs
+        return self.df.shape[0]
+
+def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/longdataset.pkl', transform=None, batch_size=10):
+    df = pd.read_pickle(data_path)
+    songs = torch.load('12fold.pkl')
+    songs = [item for sublist in songs for item in sublist]
+    shuffle(songs)
+
+    val_songs = songs[:int(len(songs)/10)]
+    t_songs = songs[int(len(songs)/10):]
+    songs = t_songs
+
+    # Create Datset objects
+    td = RagaDataset(df.loc[df['song_id'].isin(songs)], transform=transform)
+    vd = RagaDataset(df.loc[df['song_id'].isin(val_songs)], transform=None)
+
+    train_loader = DataLoader(
+        td,
+        batch_size=batch_size,
+        num_workers=multiprocessing.cpu_count(),
+        shuffle=True)
+    val_loader = DataLoader(
+        vd,
+        batch_size=batch_size,
+        num_workers=multiprocessing.cpu_count(),
+        shuffle=False)
+
+    return train_loader, val_loader, val_songs
