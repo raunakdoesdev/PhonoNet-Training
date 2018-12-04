@@ -34,14 +34,18 @@ class RagaDataset(object):
     def __len__(self):
         return self.df.shape[0]
 
-def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/longdataset.pkl', transform=None, batch_size=10):
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
+
+def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/longdataset.pkl', transform=None, batch_size=10, valpart=0):
     df = pd.read_pickle(data_path)
     songs = torch.load('12fold.pkl')
     songs = [item for sublist in songs for item in sublist]
-    shuffle(songs)
-
-    val_songs = songs[:int(len(songs) * 0.5)]
-    t_songs = songs[int(len(songs) * 0.5):]
+    # shuffle(songs)
+    songs = list(split(songs, 10))
+    val_songs = songs.pop(valpart)
+    t_songs = [item for sublist in songs for item in sublist]
     songs = t_songs
 
     # Create Datset objects

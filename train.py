@@ -9,9 +9,15 @@ from tensorboardX import SummaryWriter
 from bayes_opt import BayesianOptimization
 import random
 import gc
+import sys
+
+valpart = int(sys.argv[1])
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+vsong = np.load('kgbhup.npy')
+vsong =  torch.from_numpy(vsong).float()
 
 
 torch.set_default_tensor_type('torch.FloatTensor')
@@ -29,6 +35,8 @@ def transpose(chroma, ragaid, tonic, s):
         return chroma, ragaid, tonic, s
 
     return torch.cat([chroma[:, -shift:], chroma[:, :-shift]], 1), ragaid, (tonic + shift) % 12, s
+
+
 
 
 def run(mode, dl, model, rec, criterion, optimizer, val_songs):
@@ -89,7 +97,7 @@ def train_epochs(dropout, hidden_size, batch_size=1):
     bloss = 1000000  # initialize best scores
 
     # tl, vl, val_songs = get_dataloaders(batch_size=batch_size, split=.95, transform=transpose)
-    tl, vl, val_songs = get_dataloaders(0, batch_size=batch_size, transform=transpose)
+    tl, vl, val_songs = get_dataloaders(0, batch_size=batch_size, transform=transpose, valpart=valpart)
 
     model = RagaDetector(dropout, int(hidden_size)).to(device)
     rec = LSTM(200, 30).to(device)
@@ -120,6 +128,31 @@ def train_epochs(dropout, hidden_size, batch_size=1):
 
         print(loss)
         print("val accuracy: " + str(accuracy))
+        f = open(str(valpart) + 'part.csv','a')
+        f.write(str(accuracy)+"\n")
+        f.close()
+
+        song = vsong.to(device).unsqueeze(0).unsqueeze(0)
+        print(song.shape)
+
+        out = []
+        with torch.no_grad():
+            song_segs = song.split(1500, dim=3)
+            for i in range(len(song_segs)):
+                chunk = song_segs[i] # get specific chunk
+                if not chunk.shape[3] == 1500:  # hardcoded 1500 size
+                    padding = torch.zeros(1, 1, chunk.size()[2], 1500 - chunk.size()[3]).cuda()
+                    chunk = torch.cat((chunk, padding), 3)
+                out.append(model(chunk.contiguous()).unsqueeze(0))  # run model through your model
+
+        lstm_in = torch.cat(out).view(len(out), 1, -1)
+        lstm_in.requires_grad = True
+
+        lstm_out = rec(lstm_in)
+
+        _, predicted = torch.max(lstm_out[-1, :, :30].data, 1)
+        print(lstm_out[-1])
+        print(predicted)
 
         if accuracy > bacc:
             bacc = accuracy
