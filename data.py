@@ -42,11 +42,7 @@ def get_dataloaders(song_split_num, data_path='/home/sauhaarda/Dataset/longdatas
     df = pd.read_pickle(data_path)
     songs = torch.load('12fold.pkl')
     songs = [item for sublist in songs for item in sublist]
-    # shuffle(songs)
-    songs = list(split(songs, 10))
-    val_songs = songs.pop(valpart)
-    t_songs = [item for sublist in songs for item in sublist]
-    songs = t_songs
+    val_songs = [songs.pop(valpart),]
 
     # Create Datset objects
     td = RagaDataset(df.loc[df['song_id'].isin(songs)], transform=transform)

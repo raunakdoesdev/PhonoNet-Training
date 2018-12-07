@@ -11,7 +11,6 @@ import random
 import gc
 import sys
 
-valpart = int(sys.argv[1])
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -43,13 +42,11 @@ def run(mode, dl, model, rec, criterion, optimizer, val_songs):
     full_val_acc = {}
     model.eval()
 
-    print('Training:' if mode == 'train' else 'Validating:')
-
     with torch.set_grad_enabled(mode == 'train'):
         _loss = Averager()
         accuracy = Averager()
         tonic_accuracy = Averager()
-        for batch_idx, (song, label, tonic, sid) in progressbar.progressbar(enumerate(dl), max_value=len(dl)):
+        for batch_idx, (song, label, tonic, sid) in enumerate(dl):
 
 
             label = label.to(device)
@@ -89,7 +86,7 @@ def run(mode, dl, model, rec, criterion, optimizer, val_songs):
 
         return _loss(), accuracy(), 0, 0
 
-def train_epochs(dropout, hidden_size, batch_size=1):
+def train_epochs(dropout, hidden_size, valpart, batch_size=1):
     run_name = 'aug1'
     writer = SummaryWriter('runs/' + run_name, comment='fixed hidden size 1')
 
@@ -111,14 +108,11 @@ def train_epochs(dropout, hidden_size, batch_size=1):
     
     max_accuracy = 0
     for epoch in range(800):
-        print(epoch)
         loss, accuracy, ta, _ = run('train', tl, model, rec, criterion, optimizer, None)
         writer.add_scalar('data/train_loss', loss, epoch)
         writer.add_scalar('data/train_acc', accuracy, epoch)
         writer.add_scalar('data/train_t_acc', ta, epoch)
 
-        print(loss)
-        print("train accuracy: " + str(accuracy))
 
         loss, accuracy, ta, ans = run('val', vl, model, rec, criterion, optimizer, val_songs)
         writer.add_scalar('data/val_loss', loss, epoch)
@@ -126,14 +120,16 @@ def train_epochs(dropout, hidden_size, batch_size=1):
         writer.add_scalar('data/val_t_acc', ta, epoch)
         writer.add_scalar('data/full_val_acc', ans, epoch)
 
-        print(loss)
-        print("val accuracy: " + str(accuracy))
         f = open(str(valpart) + 'part.csv','a')
         f.write(str(accuracy)+"\n")
         f.close()
 
+        if accuracy == 1:
+            return 1
+        if epoch > 50:
+            return 0
+
         song = vsong.to(device).unsqueeze(0).unsqueeze(0)
-        print(song.shape)
 
         out = []
         with torch.no_grad():
@@ -151,17 +147,7 @@ def train_epochs(dropout, hidden_size, batch_size=1):
         lstm_out = rec(lstm_in)
 
         _, predicted = torch.max(lstm_out[-1, :, :30].data, 1)
-        print(lstm_out[-1])
-        print(predicted)
 
-        if accuracy > bacc:
-            bacc = accuracy
-            torch.save({'net' : model.state_dict(), 'epoch' : epoch, 'loss' : loss, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/0/{}_epoch_{}_acc_{}.model'.format(run_name, epoch, accuracy))
-        if loss < bloss:
-            print('saving a loss model!')
-            print('bloss')
-            bloss = loss
-            torch.save({'net' : model.state_dict(), 'loss' : loss, 'epoch' : epoch, 'acc' : accuracy, 'val_songs' : val_songs}, 'saves/0/{}_epoch_{}_loss_{}.model'.format(run_name, epoch, loss))
         bloss = min(bloss, loss)
             
         max_accuracy = max(accuracy, max_accuracy)
@@ -169,7 +155,15 @@ def train_epochs(dropout, hidden_size, batch_size=1):
     return max_accuracy
 
 if __name__ == '__main__':
-    train_epochs(0.6, 256, 1)
+    total = 0
+    count = 0.
+    for i in range(100,264):
+        total += train_epochs(0.6, 256, i)
+        count+=1.
+        print("Accuracy: " + str(total/(count)))
+        print("Num iter: " + str(i))
+    print(total)
+    print(count)
     # bo = BayesianOptimization(
     #     train_epochs,
     #     {'lr' : [0.00001, 0.1],
