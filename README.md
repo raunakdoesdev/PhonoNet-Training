@@ -14,7 +14,7 @@ This repository handles the training for my science fair project, predicting rag
 |Branch|Description|
 |---|---|
 |[Master (Stage #1 Training)](https://github.com/sauhaardac/raga_training/)|Stage #1 training of simple convolutional network on chunks of data|
-|[Recurrent](https://github.com/sauhaardac/raga_training/tree/recurrent)|Conducts Stage #2 of training with additional two-layer LSTM network.| 
-|[Leave One Validation](https://github.com/sauhaardac/raga_training/tree/leaveoneval)|Conducts thorough leave-one validation benchmark comparison for full recurrent PhonoNet architecture| 
+|[Recurrent](https://github.com/sauhaardac/PhonoNet-Training/tree/recurrent)|Conducts Stage #2 of training with additional two-layer LSTM network.| 
+|[Leave One Validation](https://github.com/sauhaardac/PhonoNet-Training/tree/leaveoneval)|Conducts thorough leave-one validation benchmark comparison for full recurrent PhonoNet architecture| 
 ## Contact Me
 If you have any questions or need assistance with this repository in any way, do not hesitate to contact me at [sauhaarda@gmail.com](mailto:sauhaarda@gmail.com). Personal website available [here](sauhaarda.me) as well.
