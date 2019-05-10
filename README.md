@@ -8,6 +8,7 @@ This repository handles the training for my science fair project, predicting rag
 |[train.py](train.py)|Actually manages backpropagation, network states, and access data loaders. Reports all training and validation accuracies to a TenssorBoard data logger.|
 |[data.py](data.py)|Handles data loading during training.|
 |[models.py](models.py)|Network model files, it's a class for models|
+|[utils.py](utils.py)|Various training utilities|
 
 #### Branch Organization
 |Branch|Description|
