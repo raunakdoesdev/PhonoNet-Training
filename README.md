@@ -1,6 +1,6 @@
 # Raga Training Repository
 
-This repository handles the training for my science fair project, predicting ragas from an audio input file.
+This repository handles the training for my science fair project, predicting ragas from an audio input file. The total project includes 5000+ lines of code across different branches and iterations of the system.
 
 #### File Organization
 |File|Description|
